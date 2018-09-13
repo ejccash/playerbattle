@@ -32,11 +32,11 @@ class playerbattle : public eosio::contract {
         account_name creater;   //游戏创建人  创建人需要支付至少1 EOS押金作为游戏房间创建费用，如果房间没有人来玩，creater可以选择关闭房间、拿回押金。但是如果有人来玩，而房主不应战(如房主支付超时，防止恶意创建游戏)，则会扣除压金给玩家。
                                 //房主押EOS 游戏正常开始后（至少经过１轮)，房主不管输赢均能拿回压金。房主压金量同时也规定了玩家起始压注量的最小值，同时玩家初始投注量也不可以大于该值的３倍
                                 //房主虽然支付压金开始游戏，同时也占有一定的后手优势。（可以看玩家实力而选择应战或者不应战）且在游戏正常结束后可退回押金，所以两相持平，creater并不吃亏。
-                                //玩家可以选择房主，但同时也需要先出牌。所以优劣互补，也不吃亏。
-                               
+                                //玩家可以选择房主，但同时也需要先出牌。所以优略互补，也不吃亏。
+                                //create 需要支出一定的内存
         account_name player;    //游戏参与人，参与人根据creater 押金量首先出牌(不可以少于押金量，但不能高于３倍)
-        asset deposit;           //creater 押金支付用于创建房间的费用（可退回的)
-        asset ctotalpay;        //游戏回合阶段创建者总支付
+        asset deposit;             //creater 押金支付用于创建房间的费用（可退回的)
+        asset ctotalpay;        //游戏回合阶段创建者总支付数
         asset ptotalpay;        //游戏回合阶段玩家总计支付                
         uint32_t cscore;        //创建者总分数
         uint32_t pscore;        //玩家总分数
@@ -45,11 +45,11 @@ class playerbattle : public eosio::contract {
         uint8_t steps;         // 玩家首次出牌后变为１，之后每一次出牌都会将该值+1.
                                 // steps 最大值为６,（也就是３回合  每回合均以player出牌为开始，以creater出牌为结束)
                                 // 当达到６时（creater最后一次支付后，合约自动计算双方得分，判断最后输赢)
-                                // 回合结束时 分数接近21点者获胜。
-                                // creater 胜:  得到player所有压注量的90%,10%为合约开发维护费用；收回自己的所有押注；收回自己的押金。
-                                // player 胜: 得到creater所有压注量的90%，10％为合约开发维护费用。收回自己的所有押注；creater 收回自己的游戏押金。
+                                // 回合结束时 分数高者为胜，分数低者为负。
+                                // creater 胜:  得到player所有压注量的90%,10%为合约开发维护费用；收回自己的所有压注；收回自己的押金。
+                                // player 胜: 得到creater所有压注量的90%，10％为合约开发维护费用。收回自己的所有压注；creater 收回自己的游戏押金。
                                 // 回合结束时 分数相同判为平，双方各拿回自己的投注。creater拿回押金
-        asset lastpay;          //最近一次押注量（每次押注，最小为该值，最大不能超过该值的３倍)
+        asset lastpay;          //最近一次压注量（本次压注要大于等于该值，但最大不能超过３倍)
         uint64_t lasttime;      //最近一次支付时间（本次支付时间不可超过该时间15分钟，超时判负）
         uint8_t status;         //游戏状态  0:初始 等待玩家参与  1:正在进行  2:已结束
         account_name winner;    //最终胜者,最终胜者可能是分高者，也可能是对方放弃游戏
@@ -108,7 +108,7 @@ class playerbattle : public eosio::contract {
      * 产生1-13 的随机数，表示得分，为了保证合约安全性及公平性，该方法暂不开源，将来可以视玩家要求而选择开源。
     */
     const uint32_t getscore(){
-        
+      
     }
 
     void creategame(account_name creater,asset deposit){
@@ -249,7 +249,7 @@ class playerbattle : public eosio::contract {
                     p.payout =  asset(0,GAME_SYMBOL);
                 });
             }else{
-                _players.modify(c_itr,from,[&](auto &p){
+                _players.modify(c_itr,_self,[&](auto &p){
                     p.lost+=1;
                     p.pay+= g_itr->deposit ;                   
                 });
@@ -267,7 +267,7 @@ class playerbattle : public eosio::contract {
                     p.payout = playerpayout;
                 });
             }else{
-                _players.modify(p_itr,from,[&](auto &p){
+                _players.modify(p_itr,_self,[&](auto &p){
                     p.win += 1;
                     p.pay += g_itr->ptotalpay;
                     p.payout += playerpayout;
@@ -310,7 +310,7 @@ class playerbattle : public eosio::contract {
                     p.payout = asset(0,GAME_SYMBOL); //只能拿加投入的2%
                 });
             }else{
-                _players.modify(c_itr,from,[&](auto &p){
+                _players.modify(c_itr,_self,[&](auto &p){
                     p.lost+=1;
                     p.pay+= g_itr->ctotalpay ;                    
                 });
@@ -327,7 +327,7 @@ class playerbattle : public eosio::contract {
                     p.payout = playerpayout;
                 });
             }else{
-                _players.modify(p_itr,from,[&](auto &p){
+                _players.modify(p_itr,_self,[&](auto &p){
                     p.win += 1;
                     p.pay += g_itr->ptotalpay;
                     p.payout += playerpayout;
@@ -365,7 +365,7 @@ class playerbattle : public eosio::contract {
                     p.payout = createrpayout - g_itr->deposit; //押金不计入总投入，自然也不计入总收入。
                 });
             }else{
-                _players.modify(c_itr,from,[&](auto &p){
+                _players.modify(c_itr,_self,[&](auto &p){
                     p.win+=1;
                     p.pay+= g_itr->ctotalpay;
                     p.payout += (createrpayout - g_itr->deposit); //同上收入中要排除押金。
@@ -384,14 +384,14 @@ class playerbattle : public eosio::contract {
                     p.payout = asset(0,GAME_SYMBOL);
                 });
             }else{
-                _players.modify(p_itr,from,[&](auto &p){
+                _players.modify(p_itr,_self,[&](auto &p){
                     p.lost += 1;
                     p.pay += g_itr->ptotalpay;
                 });
             }
         }
          //更新游戏状态至结束
-        _games.modify(g_itr,from,[&](auto &g){         
+        _games.modify(g_itr,_self,[&](auto &g){         
             g.status = 2; //表示游戏已结束；
             if(g_itr->steps ==1 || g_itr->steps==3 || g_itr->steps==5){
                 g.winner = g_itr->player;
@@ -449,7 +449,7 @@ class playerbattle : public eosio::contract {
                     p.payout =  asset(0,GAME_SYMBOL);   
                 });
             }else{
-                _players.modify(c_itr,from,[&](auto &p){
+                _players.modify(c_itr,_self,[&](auto &p){
                     p.lost+=1;
                     p.pay+= g_itr->deposit ;
                    
@@ -468,7 +468,7 @@ class playerbattle : public eosio::contract {
                     p.payout = playerpayout;
                 });
             }else{
-                _players.modify(p_itr,from,[&](auto &p){
+                _players.modify(p_itr,_self,[&](auto &p){
                     p.win += 1;
                     p.pay += g_itr->ptotalpay;
                     p.payout += playerpayout;
@@ -477,7 +477,7 @@ class playerbattle : public eosio::contract {
 
         }else if(g_itr-> steps ==3 || g_itr->steps ==5 ){
             //steps 为３、５ 说明此时为creater 出牌，creater可以选择放弃
-            eosio_assert(g_itr->creater == from," you cannt give up this game! not your turn!");
+            eosio_assert(g_itr->creater == from," you cannt give up this game! not your turn !");
             //creater 放弃后 player胜
             asset playerpayout = g_itr->ctotalpay /100*90 + g_itr->ptotalpay;    //奖励90%的creater投入以及自己的全部投入 ，2%给creater 补偿内存费用，10%开发维护费用。 
             asset devfee = g_itr->ctotalpay /10;        //10%合约开发维护费用
@@ -512,7 +512,7 @@ class playerbattle : public eosio::contract {
                     p.payout =  g_itr->ctotalpay/50;   //只能拿加投入的2%
                 });
             }else{
-                _players.modify(c_itr,from,[&](auto &p){
+                _players.modify(c_itr,_self,[&](auto &p){
                     p.lost+=1;
                     p.pay+= g_itr->ctotalpay ;
                     p.payout += g_itr->ctotalpay/50;   //能拿加投入的2%
@@ -531,7 +531,7 @@ class playerbattle : public eosio::contract {
                     p.payout = playerpayout;
                 });
             }else{
-                _players.modify(p_itr,from,[&](auto &p){
+                _players.modify(p_itr,_self,[&](auto &p){
                     p.win += 1;
                     p.pay += g_itr->ptotalpay;
                     p.payout += playerpayout;
@@ -569,7 +569,7 @@ class playerbattle : public eosio::contract {
                     p.payout = createrpayout - g_itr->deposit;   //押金不计入总投入，自然也不计入总收入。
                 });
             }else{
-                _players.modify(c_itr,from,[&](auto &p){
+                _players.modify(c_itr,_self,[&](auto &p){
                     p.win+=1;
                     p.pay+= g_itr->ctotalpay;
                     p.payout += (createrpayout - g_itr->deposit);   //同上收入中要排除押金。
@@ -588,7 +588,7 @@ class playerbattle : public eosio::contract {
                     p.payout = asset(0,GAME_SYMBOL);
                 });
             }else{
-                _players.modify(p_itr,from,[&](auto &p){
+                _players.modify(p_itr,_self,[&](auto &p){
                     p.lost += 1;
                     p.pay += g_itr->ptotalpay;
                 });
@@ -596,7 +596,7 @@ class playerbattle : public eosio::contract {
 
         }
          //更新游戏状态至结束
-        _games.modify(g_itr,from,[&](auto &g){         
+        _games.modify(g_itr,_self,[&](auto &g){         
             g.status = 2; //表示游戏已结束；
             if(g_itr->steps ==1 || g_itr->steps==3 || g_itr->steps==5){
                 g.winner = g_itr->player;
@@ -682,7 +682,7 @@ class playerbattle : public eosio::contract {
                 uint32_t score = getscore();
                 if(g_itr->steps !=5){
                     //不等于５ 说明还不是creater最后一次支付（最后一次支付成功后需要进行清算）
-                    _games.modify(g_itr,from,[&](auto &g){
+                    _games.modify(g_itr,_self,[&](auto &g){
                         g.ctotalpay += quantity;
                         g.cscore += score;
                         g.steps +=1;
@@ -691,7 +691,7 @@ class playerbattle : public eosio::contract {
                     });
 
                      auto cg_itr = _currentgames.find(g_itr->id);
-                     _currentgames.modify(cg_itr,from,[&](auto &cg){
+                     _currentgames.modify(cg_itr,_self,[&](auto &cg){
                         cg.steps +=1; 
                         cg.lasttime=now();
                      });
@@ -746,7 +746,7 @@ class playerbattle : public eosio::contract {
                                 p.payout = asset(0,GAME_SYMBOL);
                             });
                         }else{
-                            _players.modify(c_itr,from,[&](auto &p){
+                            _players.modify(c_itr,_self,[&](auto &p){
                                 p.lost+=1;
                                 p.pay+= (g_itr->ctotalpay + quantity);
                             });
@@ -764,7 +764,7 @@ class playerbattle : public eosio::contract {
                                 p.payout = playerpayout;
                             });
                         }else{
-                             _players.modify(p_itr,from,[&](auto &p){
+                             _players.modify(p_itr,_self,[&](auto &p){
                                 p.win += 1;
                                 p.pay += g_itr->ptotalpay;
                                 p.payout += playerpayout;
@@ -802,7 +802,7 @@ class playerbattle : public eosio::contract {
                                 p.payout = createrpayout - g_itr->deposit;   //押金不计入总投入，自然也不计入总收入。
                             });
                         }else{
-                            _players.modify(c_itr,from,[&](auto &p){
+                            _players.modify(c_itr,_self,[&](auto &p){
                                 p.win+=1;
                                 p.pay+= (g_itr->ctotalpay + quantity);
                                 p.payout += (createrpayout - g_itr->deposit); //同上收入中要排除押金。
@@ -821,7 +821,7 @@ class playerbattle : public eosio::contract {
                                 p.payout = asset(0,GAME_SYMBOL);
                             });
                         }else{
-                             _players.modify(p_itr,from,[&](auto &p){
+                             _players.modify(p_itr,_self,[&](auto &p){
                                 p.lost += 1;
                                 p.pay += g_itr->ptotalpay;
                              });
@@ -854,7 +854,7 @@ class playerbattle : public eosio::contract {
                                 p.payout = g_itr->ctotalpay + quantity;   //押金不计入总投入，自然也不计入总收入。
                             });
                         }else{
-                            _players.modify(c_itr,from,[&](auto &p){
+                            _players.modify(c_itr,_self,[&](auto &p){
                                 p.draw+=1;
                                 p.pay+= ( g_itr->ctotalpay + quantity);
                                 p.payout += (g_itr->ctotalpay + quantity); //同上收入中要排除押金。
@@ -873,7 +873,7 @@ class playerbattle : public eosio::contract {
                                 p.payout = g_itr->ptotalpay;
                             });
                         }else{
-                             _players.modify(p_itr,from,[&](auto &p){
+                             _players.modify(p_itr,_self,[&](auto &p){
                                 p.draw += 1;
                                 p.pay += g_itr->ptotalpay;
                                 p.payout += g_itr->ptotalpay;
@@ -883,11 +883,11 @@ class playerbattle : public eosio::contract {
 
 
                     //更新游戏信息
-                    _games.modify(g_itr,from,[&](auto &g){
+                    _games.modify(g_itr,_self,[&](auto &g){
                         g.ctotalpay+=quantity;
-                        if(g.cscore+score > g.pscore){
+                        if(ppoint > cpoint){
                             g.winner = g.creater;
-                        }else if(g.pscore>g.cscore+score){
+                        }else if(ppoint < cpoint){
                             g.winner=g.player;
                         }
                         g.cscore += score;
@@ -909,8 +909,8 @@ class playerbattle : public eosio::contract {
                 //此时为player支付
                 if(g_itr->status !=0){
                     //如果不为０ 需要检查当前支付人是否为player(防止是creater)
-                    eosio_assert(from == g_itr->player,"it's not your turn yet");
-                    _games.modify(g_itr,from,[&](auto &g){
+                    eosio_assert(from == g_itr->player,"it's not your turn  yet");
+                    _games.modify(g_itr,_self,[&](auto &g){
                         g.ptotalpay += quantity;
                         g.pscore += score;
                         g.steps +=1;
@@ -918,14 +918,14 @@ class playerbattle : public eosio::contract {
                         g.lasttime= now();
                     });   
                     auto cg_itr = _currentgames.find(g_itr->id);
-                     _currentgames.modify(cg_itr,from,[&](auto &cg){
+                     _currentgames.modify(cg_itr,_self,[&](auto &cg){
                         cg.steps +=1; 
                         cg.lasttime=now();
                      }); 
 
                 }else{
                     //如果为０ 说明首次参与，上边已做出判断不能为creater 此处不需要再进行判断                    
-                    _games.modify(g_itr,from,[&](auto &g){
+                    _games.modify(g_itr,_self,[&](auto &g){
                         g.player = from;                
                         g.ptotalpay += quantity;
                         g.pscore += score;
@@ -934,15 +934,13 @@ class playerbattle : public eosio::contract {
                         g.lasttime= now();
                         g.status = 1;                        
                     });
-                      auto cg_itr = _currentgames.find(g_itr->id);
-                     _currentgames.modify(cg_itr,from,[&](auto &cg){
-            
-                        cg.player=from;
-                        
-                        cg.status = 1;
-                        cg.steps = 1; 
-                        cg.lasttime=now();
-                     });
+                    auto cg_itr = _currentgames.find(g_itr->id);
+                    _currentgames.modify(cg_itr,_self,[&](auto &cg){            
+                    cg.player=from;                        
+                    cg.status = 1;
+                    cg.steps = 1; 
+                    cg.lasttime=now();
+                    });
                 }
             }               
 

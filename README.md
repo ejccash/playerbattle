@@ -96,7 +96,7 @@ mcleos push action playerbattle roll '[]' -p {accountname}@active
 [764,747,757,785,763,746,757,806,820,746,738,812,759]
 ```
 各点数出现的频次，基本均匀，因为所有玩家使用的同一个随机算法，所以各凭运气，而运气对所有玩家是公平的。
-核心代码如下
+测试核心代码如下
 ```
 var count=[0,0,0,0,0,0,0,0,0,0,0,0,0,0];
 testroll(10000)
@@ -113,7 +113,7 @@ function testroll(n){
                 name: 'roll',
                 authorization:[
                     {
-                        actor: 'eosclubt1',
+                        actor: 'eosjoycenter',
                         permission: 'active'
                     }
                 ],
